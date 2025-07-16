@@ -16,5 +16,5 @@
 ## 🛠️ Installation / Установка
 ```bash
 git clone https://github.com/nqox3/flexyal-osint.git
-cd flexyal-osint
+cd main
 pip install -r requirements.txt
