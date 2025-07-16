@@ -1,7 +1,7 @@
 # 🔍 FLEXYAL OSINT Tool
 **Advanced cybersecurity reconnaissance toolkit** | **Продвинутый инструмент OSINT для кибербезопасности**
 
-![Banner](https://i.imgur.com/Jf9jZ7x.png)
+![Banner](https://cdn.discordapp.com/attachments/1391066893636604069/1395049617158176840/image.png?ex=687908b3&is=6877b733&hm=92576c9072ea854782b7f879f019640b2a0f0f8a90650e536eb71af448577a96&)
 
 ## 🌟 Features / Возможности
 - **Camera Bruteforce** - Test default credentials on IP cameras  
